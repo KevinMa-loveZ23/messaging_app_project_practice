@@ -8,7 +8,7 @@ const char *dbPath = "generalDB.db";
 // #include"databaseAction.c"
 
 const char *signUp(const char *userName, const char *password);
-const char *logIn(const int userID, const char *password, int confd);
+struct dataProcessRet *logIn(const int userID, const char *password, int confd);
 struct sendRet *addFriend(const int sender, const int receiver);//TO DO, const char *msgText
 struct sendRet *sendMsg(const int sender, const int receiver, const char *timeStamp, const char *msgText);
 void logOUt(const int userID);
@@ -22,20 +22,24 @@ struct sendRet
 
 struct dataProcessRet
 {
-    char retStr[65535], sendStr[65535];
-    char sendToOther;
-    int confd;
+    char retStr[65535];//, sendStr[65535]
+    char sendToOther, sendToSelf;
+    int confd, cycle;
+    char msgList[][65535];
 };
 struct dataProcessRet *makeRetAndSend(struct sendRet *msgRet)
 {
-    struct dataProcessRet *ret = malloc(sizeof(struct dataProcessRet));
+    struct dataProcessRet *ret = malloc(sizeof(struct dataProcessRet) + 65535 * sizeof(char));
     memset(ret->retStr, 0, sizeof(ret->retStr));
     strcpy(ret->retStr, msgRet->retStr);
+    ret->sendToSelf = 0;
     if (ret->sendToOther = msgRet->sendToOther)
     {
         ret->confd = msgRet->confd;
-        memset(ret->sendStr, 0, sizeof(ret->sendStr));
-        strcpy(ret->sendStr, msgRet->sendStr);
+        // memset(ret->sendStr, 0, sizeof(ret->sendStr));
+        // strcpy(ret->sendStr, msgRet->sendStr);
+        memset(ret->msgList[0], 0, sizeof(ret->msgList[0]));
+        strcpy(ret->msgList[0], msgRet->sendStr);
     }
     free(msgRet);
     return ret;
@@ -46,6 +50,7 @@ struct dataProcessRet *makeRet(const char *retStr)
     memset(ret->retStr, 0, sizeof(ret->retStr));
     strcpy(ret->retStr, retStr);
     ret->sendToOther = 0;
+    ret->sendToSelf = 0;
     return ret;
 }
 
@@ -70,7 +75,7 @@ struct dataProcessRet *readMsgAndReact(const char *msg, int confd)
         // memset(userID, 0, sizeof(userID));
         memset(password, 0, sizeof(password));
         sscanf(actionMsg, "%d|%s", &userID, password);
-        return makeRet(logIn(userID, password, confd));
+        return logIn(userID, password, confd);
         // break;
     case 3://添加好友
         int sender, receiver;
@@ -158,7 +163,7 @@ int logInCallBack_getPassword(void *data, int argc, char **argv, char **azColNam
 
 int logInCallBack_getFriends(void *data, int argc, char **argv, char **azColName)
 {
-    unsigned short uid1, uid2;
+    int uid1, uid2;
     const char *unm1, *unm2;
     char flag1 = 1, flag2 = 1, flag3 = 1;
     for (int i = 0; i < argc; i++)
@@ -195,8 +200,35 @@ int logInCallBack_getFriends(void *data, int argc, char **argv, char **azColName
     ((struct logInData *)data)->intVal++;
     return 0;
 }
+int logInCallBack_readMsg(void *data, int argc, char **argv, char **azColName)
+{
+    int sender;
+    const char *msg, *time;
+    char flag1 = 1, flag2 = 1;
+    for (int i = 0; i < argc; i++)
+    {
+        if (flag1 && strcmp(azColName[i], "sender") == 0)
+        {
+            flag1 = 0;
+            sscanf(argv[i], "%d", &sender);
+        }
+        else if (flag2 && strcmp(azColName[i], "msg") == 0)
+        {
+            flag2 = 0;
+            msg = argv[i];
+        }
+        else
+        {
+            time = argv[i];
+        }
+    }
+    struct dataProcessRet *tmp = (struct dataProcessRet *)data;
+    sprintf(tmp->msgList[tmp->cycle], "5|%d|%s|%s", sender, time, msg);
+    tmp->cycle++;
+    return 0;
+}
 
-const char *logIn(const int userID, const char *password, int confd)
+struct dataProcessRet *logIn(const int userID, const char *password, int confd)
 {
     sqlite3 *handler;
     char *errorMsg;
@@ -208,17 +240,17 @@ const char *logIn(const int userID, const char *password, int confd)
     if (sqlite3_open(dbPath, &handler) != 0)
     {
         printf("error");
-        return "";
+        return ;
     }
     // sprintf(sql, "select max(userID) from UserInfo;");
     if (sqlite3_exec(handler, "select max(userID) from UserInfo;", logInCallBack_existID, &retIntVal, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        return ;
     }
     if (userID > retIntVal)
     {
-        return "2|1";
+        return makeRet("2|1");
     }
 
     sprintf(sql, "select password, userName from UserInfo where userID = %d;", userID);
@@ -229,11 +261,11 @@ const char *logIn(const int userID, const char *password, int confd)
     if (sqlite3_exec(handler, sql, logInCallBack_getPassword, &structData, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        return ;
     }
     if (strcmp(retStrVal, password) != 0)
     {
-        return "2|2";
+        return makeRet("2|2");
     }
 
     memset(retStrVal, 0, sizeof(retStrVal));
@@ -246,7 +278,7 @@ const char *logIn(const int userID, const char *password, int confd)
     if (sqlite3_exec(handler, sql, logInCallBack_getFriends, &structData, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        return ;
     }
     sprintf(retStrVal, "2|0|%s|%d%s", structData.strValn, structData.intVal, retStrVal);
     //// TO DO: 记录confd，用于转发信息
@@ -255,7 +287,7 @@ const char *logIn(const int userID, const char *password, int confd)
     if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        return ;
     }
     
     memset(sql, 0, sizeof(sql));
@@ -263,15 +295,40 @@ const char *logIn(const int userID, const char *password, int confd)
     if (sqlite3_exec(handler, sql, logInCallBack_existID, &retIntVal, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        return ;
     }
+    struct dataProcessRet *retVal;
     if (retIntVal)
     {
         //把离线时的信息一口气扔回去
+        retVal = malloc(sizeof(sizeof(struct dataProcessRet) + retIntVal * 65535 * sizeof(char)));
+        memset(retVal, 0, sizeof(retVal));
+        strcpy(retVal->retStr, retStrVal);
+        retVal->sendToOther = 0;
+        retVal->sendToSelf = 1;
+        retVal->confd = confd;
+        retVal->cycle = 0;
+        memset(sql, 0, sizeof(sql));
+        sprintf(sql, "select sender, msg, timestamp from MessageList where receiver = %d", userID);
+        if (sqlite3_exec(handler, sql, logInCallBack_readMsg, retVal, &errorMsg) != 0)
+        {
+            printf("%s", errorMsg);
+            return ;
+        }
+        memset(sql, 0, sizeof(sql));
+        sprintf(sql, "updata UserInfo set msgWait = 0 where userID = %d;", userID);
+        if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
+        {
+            printf("%s", errorMsg);
+            return ;
+        }
     }
-
+    else
+    {
+        retVal = makeRet(retStrVal);
+    }
     sqlite3_close(handler);
-    return retStrVal;
+    return retVal;
 }
 
 int addFriendCallBack_getName(void *data, int argc, char **argv, char **azColName)

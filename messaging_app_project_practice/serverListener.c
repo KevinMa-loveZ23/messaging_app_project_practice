@@ -23,15 +23,6 @@ void *getConn(void *arg)
         // strncpy(sendBuf, readMsgAndReact(buf), sizeof(sendBuf));
         // sendBuf = readMsgAndReact(buf, confd);
         ret = readMsgAndReact(buf, confd);
-        if (ret->sendToOther)
-        {
-            exitFlag = send(ret->confd, ret->sendStr, sizeof(ret->sendStr), 0);
-        }
-        if (exitFlag == -1 || exitFlag == 0)
-        {
-            free(ret);
-            break;
-        }
         // exitFlag = send(confd, sendBuf, sizeof(sendBuf), 0);
         exitFlag = send(confd, ret->retStr, sizeof(ret->retStr), 0);
         if (exitFlag == -1 || exitFlag == 0)
@@ -40,6 +31,26 @@ void *getConn(void *arg)
             break;
         }
         memset(buf, 0, sizeof(buf));
+        if (ret->sendToOther || ret->sendToSelf)
+        {
+            if (ret->sendToOther)
+            {
+                // exitFlag = send(ret->confd, ret->sendStr, sizeof(ret->sendStr), 0);
+                exitFlag = send(ret->confd, ret->msgList[0], sizeof(ret->msgList[0]), 0);
+            }
+            else
+            {
+                for (int i = 0; i < ret->cycle; i++)
+                {
+                    exitFlag = send(confd, ret->msgList[i], sizeof(ret->msgList[i]), 0);
+                }
+            }
+        }
+        if (exitFlag == -1 || exitFlag == 0)
+        {
+            free(ret);
+            break;
+        }
         free(ret);
     }
     pthread_exit(NULL);
