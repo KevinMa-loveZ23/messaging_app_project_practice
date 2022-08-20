@@ -248,10 +248,36 @@ const char *logIn(const int userID, const char *password, int confd)
         printf("%s", errorMsg);
         return "";
     }
-    sqlite3_close(handler);
     sprintf(retStrVal, "2|0|%s|%d%s", structData.strValn, structData.intVal, retStrVal);
-    //TO DO: 记录confd，用于转发信息
+    //// TO DO: 记录confd，用于转发信息
+    memset(sql, 0, sizeof(sql));
+    sprintf(sql, "updata UserInfo set confd = %d where userID = %d;", confd, userID);
+    if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
+    {
+        printf("%s", errorMsg);
+        return "";
+    }
+    
+    memset(sql, 0, sizeof(sql));
+    sprintf(sql, "select msgWait from UserInfo where userID = %d", userID);
+    if (sqlite3_exec(handler, sql, logInCallBack_existID, &retIntVal, &errorMsg) != 0)
+    {
+        printf("%s", errorMsg);
+        return "";
+    }
+    if (retIntVal)
+    {
+        //把离线时的信息一口气扔回去
+    }
+
+    sqlite3_close(handler);
     return retStrVal;
+}
+
+int addFriendCallBack_getName(void *data, int argc, char **argv, char **azColName)
+{
+    strcpy((char *)data, argv[0]);
+    return 0;
 }
 
 struct sendRet *addFriend(const int sender, const int receiver)
@@ -260,6 +286,7 @@ struct sendRet *addFriend(const int sender, const int receiver)
     char *errorMsg;
     char sql[256];
     int retIntVal;
+    char retStrVal[64];
     struct sendRet *ret;
     if (sqlite3_open(dbPath, &handler) != 0)
     {
@@ -281,5 +308,36 @@ struct sendRet *addFriend(const int sender, const int receiver)
         strcat(ret->retStr, "3|1");
         return ret;
     }
+    //可以加上防重复检测在这，暂时没有
+
+    char senderName[64], receiverName[64];
+    memset(sql, 0, sizeof(sql));
+    sprintf(sql, "select userName from UserInfo where userID = %d;", sender);
+    memset(retStrVal, 0, sizeof(retStrVal));
+    memset(senderName, 0, sizeof(senderName));
+    if (sqlite3_exec(handler, sql, addFriendCallBack_getName, retStrVal, &errorMsg) != 0)
+    {
+        printf("%s", errorMsg);
+        return "";
+    }
+    strcpy(senderName, retStrVal);
+    memset(sql, 0, sizeof(sql));
+    sprintf(sql, "select userName from UserInfo where userID = %d;", receiver);
+    memset(retStrVal, 0, sizeof(retStrVal));
+    memset(receiverName, 0, sizeof(receiverName));
+    if (sqlite3_exec(handler, sql, addFriendCallBack_getName, retStrVal, &errorMsg) != 0)
+    {
+        printf("%s", errorMsg);
+        return "";
+    }
+    strcpy(receiverName, retStrVal);
     
+    memset(sql, 0, sizeof(sql));
+    sprintf(sql, "insert into Friendship (userID1, userName1, userID2, userName2) values (%d, '%s', %d, '%s');", sender, senderName, receiver, receiverName);
+    if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
+    {
+        printf("%s", errorMsg);
+        return "";
+    }
+    // sprintf(sql, "insert into Friendship ()", );
 }

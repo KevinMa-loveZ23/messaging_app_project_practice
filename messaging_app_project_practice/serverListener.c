@@ -81,7 +81,7 @@ int serverSetListening(unsigned int cycleTimes)
         }
         else
         {
-            pthread_create(&tid, NULL, &getConn, &confd);
+            pthread_create(&tid, NULL, getConn, &confd);
         }
     }
     return 1;
