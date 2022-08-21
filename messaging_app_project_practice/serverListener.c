@@ -98,7 +98,7 @@ int serverSetListening(unsigned int cycleTimes)
     }
     return 1;
 }
-int serverSetListening()
-{
-    return serverSetListening(0);
-}
+// int serverSetListening()
+// {
+//     return serverSetListening(0);
+// }

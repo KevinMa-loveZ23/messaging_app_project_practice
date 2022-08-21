@@ -66,13 +66,16 @@ struct dataProcessRet *readMsgAndReact(const char *msg, int confd)
     switch (opr)
     {
     case 1://注册
+    {
         char userName[64], password[64];
         memset(userName, 0, sizeof(userName));
         memset(password, 0, sizeof(password));
         sscanf(actionMsg, "%[^|]|%s", userName, password);
         return makeRet(signUp(userName, password));
         // break;
+    }
     case 2://登录
+    {
         int userID;
         char password[64];
         // memset(userID, 0, sizeof(userID));
@@ -80,14 +83,18 @@ struct dataProcessRet *readMsgAndReact(const char *msg, int confd)
         sscanf(actionMsg, "%d|%s", &userID, password);
         return logIn(userID, password, confd);
         // break;
+    }
     case 3://添加好友
+    {
         int sender, receiver;
         // char msgText[65535];
         // memset(msgText, 0, sizeof(msgText));
         sscanf(actionMsg, "%d|%d", &sender, &receiver);//|%s , msgText
         return makeRetAndSend(addFriend(sender, receiver));//, msgText
         // break;
+    }
     case 4://发送信息
+    {
         int sender, receiver;
         char timeStamp[32], msgText[65535];
         // memset(sender, 0, sizeof(sender));
@@ -97,6 +104,7 @@ struct dataProcessRet *readMsgAndReact(const char *msg, int confd)
         sscanf(actionMsg, "%d|%d|%[^|]|%s", &sender, &receiver, timeStamp, msgText);
         return makeRetAndSend(sendMsg(sender, receiver, timeStamp, msgText));
         // break;
+    }
     
     default:
         break;
