@@ -11,7 +11,7 @@ const char *signUp(const char *userName, const char *password);
 struct dataProcessRet *logIn(const int userID, const char *password, int confd);
 struct sendRet *addFriend(const int sender, const int receiver);//TO DO, const char *msgText
 struct sendRet *sendMsg(const int sender, const int receiver, const char *timeStamp, const char *msgText);
-void logOUt(const int userID);
+void logOut(const int confd);
 
 struct sendRet
 {
@@ -294,7 +294,7 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
     sprintf(retStrVal, "2|0|%s|%d%s", structData.strValn, structData.intVal, retStrVal);
     //// TO DO: 记录confd，用于转发信息
     memset(sql, 0, sizeof(sql));
-    sprintf(sql, "updata UserInfo set confd = %d where userID = %d;", confd, userID);
+    sprintf(sql, "update UserInfo set confd = %d where userID = %d;", confd, userID);
     if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
@@ -330,7 +330,7 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
             return ;
         }
         memset(sql, 0, sizeof(sql));
-        sprintf(sql, "updata UserInfo set msgWait = 0 where userID = %d;", userID);
+        sprintf(sql, "update UserInfo set msgWait = 0 where userID = %d;", userID);
         if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
         {
             printf("%s", errorMsg);
@@ -472,7 +472,7 @@ struct sendRet *sendMsg(const int sender, const int receiver, const char *timeSt
  	sqlite3 *handler;
  	char *errorMsg;
  	char sql[256];
- 	if(sqlite3_open(dbPath, &handler) != 0)
+ 	if (sqlite3_open(dbPath, &handler) != 0)
  	{
  		printf("error");
         sqlite3_close(handler);
@@ -533,3 +533,25 @@ struct sendRet *sendMsg(const int sender, const int receiver, const char *timeSt
 	sqlite3_close(handler);
 	return ret;
  }
+
+void logOut(const int confd)
+{
+    sqlite3 *handler;
+ 	char *errorMsg;
+ 	char sql[256];
+ 	if (sqlite3_open(dbPath, &handler) != 0)
+ 	{
+ 		printf("error");
+        sqlite3_close(handler);
+ 		return ;
+	}
+    memset(sql, 0, sizeof(sql));
+    sprintf(sql, "update UserInfo set confd = NULL where confd = %d;", confd);
+    if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
+    {
+        printf("%s", errorMsg);
+        sqlite3_close(handler);
+        return ;
+    }
+    sqlite3_close(handler);
+}

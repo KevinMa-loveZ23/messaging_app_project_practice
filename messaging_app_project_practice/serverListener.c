@@ -53,6 +53,7 @@ void *getConn(void *arg)
         }
         free(ret);
     }
+    logOut(confd);
     pthread_exit(NULL);
 }
 
