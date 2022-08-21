@@ -15,17 +15,20 @@ void logOUt(const int userID);
 
 struct sendRet
 {
-    char retStr[16], sendStr[65535];
-    char sendToOther;
-    int confd;
+    char retStr[16], sendStr[65535];//ret是返回给发信者的信息，也即反馈信息；send是发送给在线用户的其他用户的信息（离线的用户没有，信息在logIn中发送）
+    char sendToOther;//被发信者在线时为1（立刻向在线用户发信），否则为0
+    int confd;//被发信者的confd，从UserInfo中获取
 };
 
 struct dataProcessRet
 {
-    char retStr[65535];//, sendStr[65535]
-    char sendToOther, sendToSelf;
-    int confd, cycle;
+    char retStr[65535];//, sendStr[65535]；retStr意义同上
+    char sendToOther, sendToSelf;//ToOther意义同上，ToSelf只有logIn时可能为1（详见logIn发送离线信息）；两者不会同时为1
+    int confd, cycle;//confd同上，cycle为ToSelf时的离线信息数
     char msgList[][65535];
+    //当ToOther为1时，如makeREtAndSend提供65535个char大小空间，msgList[0]发挥sendStr作用；
+    //当ToSelf为1时，如logIn中提供cycle*65535个char大小空间即cycle个65535大小字符数组用于储存离线信息；
+    //当都为0时不占空间，相当于无sendStr
 };
 struct dataProcessRet *makeRetAndSend(struct sendRet *msgRet)
 {
@@ -118,12 +121,14 @@ const char *signUp(const char *userName, const char *password)
     if (sqlite3_open(dbPath, &handler) != 0)
     {
         printf("error");
+        sqlite3_close(handler);
         return "";
     }
     sprintf(sql, "insert into UserInfo (password, userName) values ('%s', '%s'); select max(userID) from UserInfo;", password, userName);
     if (sqlite3_exec(handler, sql, signUpCallBack, &retIntVal, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
+        sqlite3_close(handler);
         return "";
     }
     sqlite3_close(handler);
@@ -240,16 +245,19 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
     if (sqlite3_open(dbPath, &handler) != 0)
     {
         printf("error");
+        sqlite3_close(handler);
         return ;
     }
     // sprintf(sql, "select max(userID) from UserInfo;");
     if (sqlite3_exec(handler, "select max(userID) from UserInfo;", logInCallBack_existID, &retIntVal, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
+        sqlite3_close(handler);
         return ;
     }
     if (userID > retIntVal)
     {
+        sqlite3_close(handler);
         return makeRet("2|1");
     }
 
@@ -261,10 +269,12 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
     if (sqlite3_exec(handler, sql, logInCallBack_getPassword, &structData, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
+        sqlite3_close(handler);
         return ;
     }
     if (strcmp(retStrVal, password) != 0)
     {
+        sqlite3_close(handler);
         return makeRet("2|2");
     }
 
@@ -278,6 +288,7 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
     if (sqlite3_exec(handler, sql, logInCallBack_getFriends, &structData, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
+        sqlite3_close(handler);
         return ;
     }
     sprintf(retStrVal, "2|0|%s|%d%s", structData.strValn, structData.intVal, retStrVal);
@@ -287,6 +298,7 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
     if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
+        sqlite3_close(handler);
         return ;
     }
     
@@ -295,6 +307,7 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
     if (sqlite3_exec(handler, sql, logInCallBack_existID, &retIntVal, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
+        sqlite3_close(handler);
         return ;
     }
     struct dataProcessRet *retVal;
@@ -313,6 +326,7 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
         if (sqlite3_exec(handler, sql, logInCallBack_readMsg, retVal, &errorMsg) != 0)
         {
             printf("%s", errorMsg);
+            sqlite3_close(handler);
             return ;
         }
         memset(sql, 0, sizeof(sql));
@@ -320,6 +334,7 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
         if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
         {
             printf("%s", errorMsg);
+            sqlite3_close(handler);
             return ;
         }
     }
@@ -331,9 +346,24 @@ struct dataProcessRet *logIn(const int userID, const char *password, int confd)
     return retVal;
 }
 
+struct friendData
+{
+    int confd;
+    char isNotNull;
+};
+
 int addFriendCallBack_getName(void *data, int argc, char **argv, char **azColName)
 {
     strcpy((char *)data, argv[0]);
+    return 0;
+}
+
+int addFriendCallBack_getConfd(void *data, int argc, char **argv, char **azColName)
+{
+    if (((struct friendData *)data)->isNotNull = argv[0]? 1: 0)
+    {
+        sscanf(argv[0], "%d", &(((struct friendData *)data)->confd));
+    }
     return 0;
 }
 
@@ -348,13 +378,15 @@ struct sendRet *addFriend(const int sender, const int receiver)
     if (sqlite3_open(dbPath, &handler) != 0)
     {
         printf("error");
-        return "";
+        sqlite3_close(handler);
+        return ;
     }
     // sprintf(sql, "select max(userID) from UserInfo;");
     if (sqlite3_exec(handler, "select max(userID) from UserInfo;", logInCallBack_existID, &retIntVal, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        sqlite3_close(handler);
+        return ;
     }
     if (receiver > retIntVal)
     {
@@ -362,7 +394,8 @@ struct sendRet *addFriend(const int sender, const int receiver)
         ret = malloc(sizeof(struct sendRet));
         ret->sendToOther = 0;
         memset(ret->retStr, 0, sizeof(ret->retStr));
-        strcat(ret->retStr, "3|1");
+        strcpy(ret->retStr, "3|1");
+        sqlite3_close(handler);
         return ret;
     }
     //可以加上防重复检测在这，暂时没有
@@ -375,7 +408,8 @@ struct sendRet *addFriend(const int sender, const int receiver)
     if (sqlite3_exec(handler, sql, addFriendCallBack_getName, retStrVal, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        sqlite3_close(handler);
+        return ;
     }
     strcpy(senderName, retStrVal);
     memset(sql, 0, sizeof(sql));
@@ -385,7 +419,8 @@ struct sendRet *addFriend(const int sender, const int receiver)
     if (sqlite3_exec(handler, sql, addFriendCallBack_getName, retStrVal, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        sqlite3_close(handler);
+        return ;
     }
     strcpy(receiverName, retStrVal);
     
@@ -394,7 +429,107 @@ struct sendRet *addFriend(const int sender, const int receiver)
     if (sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
     {
         printf("%s", errorMsg);
-        return "";
+        sqlite3_close(handler);
+        return ;
     }
+    
+    memset(sql, 0, sizeof(sql));
+    sprintf(sql, "select confd from UserInfo where userID = %d;", receiver);
+    struct friendData tmp;
+    if (sqlite3_exec(handler, sql, addFriendCallBack_getConfd, &tmp, &errorMsg) != 0)
+    {
+        printf("%s", errorMsg);
+        sqlite3_close(handler);
+        return ;
+    }
+    if (tmp.isNotNull)
+    {
+        ret = malloc(sizeof(struct sendRet));
+        memset(ret, 0, sizeof(ret));
+        ret->sendToOther = 1;
+        ret->confd = tmp.confd;
+        strcpy(ret->retStr, "3|0");
+        // char sendStr[150];
+        // memset(sendStr, 0, sizeof(sendStr));
+        sprintf(ret->sendStr, "6|%d|%s", sender, senderName);
+        // strcpy(ret->sendStr, sendStr);
+    }
+    else
+    {
+        ret = malloc(sizeof(struct sendRet));
+        ret->sendToOther = 0;
+        memset(ret->retStr, 0, sizeof(ret->retStr));
+        strcpy(ret->retStr, "3|0");
+    }
+    
     // sprintf(sql, "insert into Friendship ()", );
+    sqlite3_close(handler);
+	return ret;
 }
+
+struct sendRet *sendMsg(const int sender, const int receiver, const char *timeStamp, const char *msgText)
+ {
+ 	sqlite3 *handler;
+ 	char *errorMsg;
+ 	char sql[256];
+ 	if(sqlite3_open(dbPath, &handler) != 0)
+ 	{
+ 		printf("error");
+        sqlite3_close(handler);
+ 		return ;
+	}
+    struct sendRet *ret;
+	// sprintf(sql, "insert into MessageList(sender, reciever, msg, timestamp) values(%d, %d, %s, %s);", sender, reviever, msgText, timeStamp);
+	// if(sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
+	// {
+	// 	printf("%s",errorMsg);
+	// 	return ;
+	// }
+	// memset(sql, 0, sizeof(sql));
+	// sprintf(sql, "update UserInfo set Msgwait = Msfwait + 1 where userID = %d;", reciever);
+	// if(sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
+	// {
+	// 	printf("%s",erroMsg);
+	// 	return ;
+	// }
+ 	memset(sql, 0, sizeof(sql));
+    sprintf(sql, "select confd from UserInfo where userID = %d;", receiver);
+    struct friendData tmp;
+    if (sqlite3_exec(handler, sql, addFriendCallBack_getConfd, &tmp, &errorMsg) != 0)
+    {
+        printf("%s", errorMsg);
+        sqlite3_close(handler);
+        return ;
+    }
+    if (tmp.isNotNull)
+    {
+        ret = malloc(sizeof(struct sendRet));
+        memset(ret, 0, sizeof(ret));
+        ret->sendToOther = 1;
+        ret->confd = tmp.confd;
+        strcpy(ret->retStr, "4|0");
+        // char sendStr[65535];
+        // memset(sendStr, 0, sizeof(sendStr));
+        sprintf(ret->sendStr, "5|%d|%s|%s", sender, timeStamp, msgText);
+    }
+    else
+    {
+        memset(sql, 0, sizeof(sql));
+        sprintf(sql,
+        "insert into MessageList(receiver, sender, msg, timestamp) values(%d, %d, %s, %s); update UserInfo set msgWait = msgWait + 1 where userID = %d;",
+        receiver, sender, msgText, timeStamp, receiver);
+        if(sqlite3_exec(handler, sql, NULL, NULL, &errorMsg) != 0)
+        {
+            printf("%s",errorMsg);
+            sqlite3_close(handler);
+            return ;
+        }
+        ret = malloc(sizeof(struct sendRet));
+        memset(ret->retStr, 0, sizeof(ret->retStr));
+        ret->sendToOther = 0;
+        strcpy(ret->retStr, "4|0");
+    }
+    
+	sqlite3_close(handler);
+	return ret;
+ }
